@@ -5,21 +5,21 @@
 replicaCount: 1
 
 image:
-  repository: gcr.io/travis-ci-staging-services-1/travis-build
-  tag: v10.0.0-825-gc6cbd25a
+  repository: quay.io/travisci/travis-build
+  tag: 6720f06
   pullPolicy: IfNotPresent
 
 nameOverride: ""
 fullnameOverride: ""
 secretName: ""
 
-resources: 
- limits:
-  cpu: 500m
-  memory: 512Mi
- requests:
-  cpu: 100m
-  memory: 128Mi
+resources: {}
+# limits:
+#  cpu: 100m
+#  memory: 128Mi
+# requests:
+#  cpu: 100m
+#  memory: 128Mi
 
 nodeSelector: {}
 
@@ -50,16 +50,6 @@ ingress:
   #  - secretName: chart-example-tls
   #    hosts:
   #      - chart-example.local
-
-vault:
-  secret: travis-build-staging-org
-
-autoscaling: 
-  enabled: "true"
-  minReplicas: 1
-  maxReplicas: 5
-  targetAverageCPUUtilization: 75
-  targetAverageMemoryValue: 400Mi
 
 debug: "false"
 enableDebugTools: "false"

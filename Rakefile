@@ -6,7 +6,8 @@ task default: %i[lint validate package]
 CHARTS = FileList["charts/*"].resolve
 
 task :lint do
-  CHARTS.each do |chart|
+  sh "helm repo add stable https://charts.helm.sh/stable"
+  CHARTS.each do |chart|    
     sh "helm dependency update #{chart}"
   end
 end
@@ -23,7 +24,7 @@ task :package do
     CHARTS.each do |chart|
       sh "helm package -u ../#{chart}"
     end
-    sh "helm repo index . --url https://travis-ci-helm-charts.storage.googleapis.com"
+    sh "helm repo index . --url https://charts.helm.sh/stable"
   end
 end
 
@@ -31,13 +32,16 @@ RELEASES = FileList["releases/**/*.yaml"]
 
 task :validate do
   RELEASES.each do |release|
-    validate_release(release)
+    next if validate_release(release) == 'skip'
   end
 end
 
 def validate_release(release)
   r = YAML.safe_load(File.read(release))
-  return unless r['spec']['chart']['git'] == 'git@github.com:travis-ci/kubernetes-config.git'
+  if r['kind'] != "HelmRelease" || r['spec']['chart']['git'] != "git@github.com:travis-ci/kubernetes-config.git"
+    puts "==> Skipping \`helm template\` for file #{release}"
+    return 'skip'
+  end 
 
   namespace = r['metadata']['namespace']
   release_name = r['spec']['releaseName']

@@ -4,6 +4,8 @@ kind: HelmRelease
 metadata:
   name: travis-build
   namespace: gce-staging-services-1
+  annotations:
+    flux.weave.works/automated: 'true'
 spec:
   chart:
     path: charts/travis-build
@@ -17,11 +19,6 @@ spec:
       app: travis-build
       env: staging-1
       pro: false
-
-    image:
-      repository: gcr.io/travis-ci-staging-services-1/travis-build
-      tag: v10.0.0-828-g44e61639
-      pullPolicy: IfNotPresent
 
     replicaCount: 1
 

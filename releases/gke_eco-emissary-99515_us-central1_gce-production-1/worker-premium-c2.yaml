@@ -11,12 +11,12 @@ spec:
   releaseName: worker-premium-c2
   values:
     image:
-      repository: travisci/worker
-      tag: v6.2.1-21-g73afc12
+      repository: gcr.io/travis-ci-prod-services-1/worker
+      tag: v6.2.22
 
     cluster:
       enabled: true
-      maxJobs: 50
+      maxJobs: 350
       maxJobsPerWorker: 50
 
     site: com
