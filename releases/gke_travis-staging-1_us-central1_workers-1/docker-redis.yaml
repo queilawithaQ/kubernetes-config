@@ -2,14 +2,14 @@
 apiVersion: flux.weave.works/v1beta1
 kind: HelmRelease
 metadata:
-  name: redis
-  namespace: gce-staging-services-1
+  name: docker-redis
+  namespace: default
 spec:
   chart:
     repository: https://charts.helm.sh/stable
     name: redis
-    version: 9.1.7
-  releaseName: redis
+    version: 8.0.13
+  releaseName: docker-redis
   values:
     cluster:
       enabled: false
