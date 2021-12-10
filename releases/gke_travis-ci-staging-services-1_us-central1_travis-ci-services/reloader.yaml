@@ -1,0 +1,16 @@
+---
+apiVersion: flux.weave.works/v1beta1
+kind: HelmRelease
+metadata:
+  name: reloader
+  namespace: gce-staging-services-1
+  labels:
+    chart: reloader
+spec:
+  releaseName: reloader
+  chart:
+    path: deployments/kubernetes/chart/reloader/
+    git: git@github.com:r-arek/Reloader.git
+    ref: master
+  values:
+    replicaCount: 1

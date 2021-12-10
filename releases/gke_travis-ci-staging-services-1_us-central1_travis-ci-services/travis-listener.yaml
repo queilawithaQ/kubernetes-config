@@ -1,0 +1,44 @@
+---
+apiVersion: flux.weave.works/v1beta1
+kind: HelmRelease
+metadata:
+  name: travis-listener
+  namespace: gce-staging-services-1
+spec:
+  chart:
+    path: charts/travis-listener
+    git: git@github.com:travis-ci/kubernetes-config.git
+    ref: staging
+  releaseName: travis-listener
+  values:
+    image:
+      repository: gcr.io/travis-ci-staging-services-1/travis-listener
+      tag: v1.0.5-21-ge897c14
+      pullPolicy: IfNotPresent
+    vault:
+      secret: travis-listener-staging-org
+    trvs:
+      enabled: true
+      env: staging-1
+      pro: false
+    replicaCount: 2
+    env:
+      RACK_ENV: production
+    ingress:
+      enabled: true
+      annotations:
+        kubernetes.io/ingress.class: contour
+        certmanager.k8s.io/cluster-issuer: letsencrypt-staging
+        ingress.kubernetes.io/force-ssl-redirect: "true"
+        kubernetes.io/tls-acme: "true"
+        contour.heptio.com/tls-minimum-protocol-version: "1.2"
+      hosts:
+      - host: notify-staging.travis-ci.org
+        paths: ["/"]
+      - host: notify.staging.travis-ci.org
+        paths: ["/"]
+      tls:
+      - secretName: notify-staging-travis-ci-org-tls
+        hosts:
+        - notify-staging.travis-ci.org
+        - notify.staging.travis-ci.org
