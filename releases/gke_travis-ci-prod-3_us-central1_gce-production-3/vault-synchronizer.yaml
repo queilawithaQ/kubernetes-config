@@ -1,0 +1,229 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-auth
+  namespace: gce-production-3
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: secret-admin
+  namespace: gce-production-3
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["*"]
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: secret-admin-rolebinding
+  namespace: gce-production-3
+subjects:
+- kind: ServiceAccount
+  name: vault-auth
+  namespace: gce-production-3
+roleRef:
+  kind: Role
+  name: secret-admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: role-tokenreview-binding
+  namespace: gce-production-3
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: vault-auth
+  namespace: gce-production-3
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: generate-token
+  namespace: gce-production-3
+data:
+  generate_token.rb: |
+   #!/usr/bin/env ruby
+   #
+   # Generate new token or renew if exists
+   #
+
+   require 'vault'
+
+   Vault.address = ENV['VAULT_ADDR']
+
+   if (File.file?(ENV['VAULT_TOKEN_PATH']))
+     token = File.read(ENV['VAULT_TOKEN_PATH'])
+     Vault.token = token
+     Vault.auth_token.renew(token, "767h")
+   else
+     Vault.auth.userpass(ENV['VAULT_USERNAME'], ENV['VAULT_PASSWORD'])
+     auth_token = Vault.auth_token.create
+     token = auth_token.auth.client_token
+     File.write(ENV['VAULT_TOKEN_PATH'], token)
+   end
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renew-token
+  namespace: gce-production-3
+data:
+  renew_token.rb: |
+   #!/usr/bin/env ruby
+   #
+   # Renew token every 24h, create if not exists
+   #
+
+   require 'vault'
+   require 'logger'
+
+   @logger = Logger.new('/proc/1/fd/1')
+   Vault.address = ENV['VAULT_ADDR']
+
+   def renew_token
+
+     if (File.file?(ENV['VAULT_TOKEN_PATH']))
+       token = File.read(ENV['VAULT_TOKEN_PATH'])
+       Vault.token = token
+       auth_token = Vault.auth_token.lookup(token)
+       @logger.info("token ttl: #{auth_token.data[:ttl]}")
+       if ( auth_token.data[:ttl] < 2678400 ) # renew every 24h
+         @logger.info("renew token")
+         renew = Vault.auth_token.renew(token, "767h")
+         if renew.warnings.nil?
+           @logger.info("renew success!")
+         else
+           @logger.info("renew warnings: #{renew.warnings}")
+         end
+       end
+     else
+       login
+     end
+   rescue => e
+     login
+     puts e.inspect
+   end
+
+   def login
+     Vault.auth.userpass(ENV['VAULT_USERNAME'], ENV['VAULT_PASSWORD'])
+     auth_token = Vault.auth_token.create
+     token = auth_token.auth.client_token
+     File.write(ENV['VAULT_TOKEN_PATH'], token)
+   end
+
+   loop do
+     t = Time.now
+     renew_token
+     sleep(t + 60 - Time.now)
+   end
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-kubernetes-synchronizer
+  namespace: gce-production-3
+  labels:
+    appl: vault-kubernetes-synchronizer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      appl: vault-kubernetes-synchronizer
+  template:
+    metadata:
+      labels:
+        appl: vault-kubernetes-synchronizer
+    spec:
+      serviceAccountName: vault-auth
+      volumes:
+      - name: vault-token
+        emptyDir:
+          medium: Memory
+      - name: generate-token
+        configMap:
+          name: generate-token
+      - name: renew-token
+        configMap:
+          name: renew-token
+      initContainers:
+      - name: vault-kubernetes-authenticator
+        image: ruby:2.6.6-slim
+        command: ["/bin/sh", "-c"]
+        args:
+          - gem install vault -v 0.13.0 && ruby /script/generate_token.rb
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: vault-token
+          mountPath: /home/vault
+        - name: generate-token
+          mountPath: /script/generate_token.rb
+          subPath: generate_token.rb
+        env:
+        - name: VAULT_ADDR
+          value: https://vault-east1.travis-ci.org
+        - name: VAULT_SKIP_VERIFY
+          value: "true"
+        - name: VAULT_AUTH_MOUNT_PATH
+          value: kubernetes
+        - name: VAULT_ROLE
+          value: vault-auth
+        - name: VAULT_TOKEN_PATH
+          value: /home/vault/.vault-token
+        - name: ALLOW_FAIL
+          value: "true"
+        envFrom:
+        - secretRef:
+            name: vault-services-production # username and password to vault (it must be inserted manually before first run)
+      containers:
+      - name: vault-kubernetes-synchronizer
+        image: gcr.io/travis-staging-1/vault-kubernetes-synchronizer:0.1.4-1-loop
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: vault-token
+          mountPath: /home/vault
+        env:
+        - name: VAULT_ADDR
+          value: https://vault-east1.travis-ci.org
+        - name: VAULT_SKIP_VERIFY
+          value: "true"
+        - name: VAULT_TOKEN_PATH
+          value: /home/vault/.vault-token
+        - name: VAULT_SECRETS
+          value: gce-lxd-autoscaler/
+      - name: vault-kubernetes-token-renewer
+        image: ruby:2.6.6-slim
+        command: ["/bin/sh", "-c"]
+        args:
+          - gem install vault -v 0.13.0 && ruby /script/renew_token.rb
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: vault-token
+          mountPath: /home/vault
+        - name: renew-token
+          mountPath: /script/renew_token.rb
+          subPath: renew_token.rb
+        env:
+        - name: VAULT_ADDR
+          value: https://vault-east1.travis-ci.org
+        - name: VAULT_SKIP_VERIFY
+          value: "true"
+        - name: VAULT_AUTH_MOUNT_PATH
+          value: kubernetes
+        - name: VAULT_TOKEN_PATH
+          value: /home/vault/.vault-token
+        envFrom:
+        - secretRef:
+            name: vault-services-production
