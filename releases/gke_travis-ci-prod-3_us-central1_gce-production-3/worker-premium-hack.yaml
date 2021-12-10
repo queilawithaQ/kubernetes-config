@@ -11,12 +11,12 @@ spec:
   releaseName: worker-premium-hack
   values:
     image:
-      repository: travisci/worker
-      tag: v6.2.0-6-ga7e15a0
+      repository: gcr.io/travis-ci-prod-services-1/worker
+      tag: v6.2.22
 
     cluster:
       enabled: true
-      maxJobs: 50
+      maxJobs: 0
       maxJobsPerWorker: 50
 
     site: com

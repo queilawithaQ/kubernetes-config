@@ -1,0 +1,16 @@
+---
+apiVersion: flux.weave.works/v1beta1
+kind: HelmRelease
+metadata:
+  name: nginx-ingress
+  namespace: gce-staging-services-1
+spec:
+  chart:
+    path: charts/nginx-ingress
+    git: git@github.com:travis-ci/kubernetes-config.git
+    ref: staging
+  releaseName: nginx-ingress
+  values:
+    controller:
+      service:
+        externalTrafficPolicy: "Local"
